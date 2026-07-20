@@ -106,13 +106,16 @@ export async function POST(request: NextRequest) {
 
     // Notify org
     try {
-      await sendDeliveryConfirmationEmail(job.goodsContribution.contribution.organisation.contactEmail, {
-        orgName: job.goodsContribution.contribution.organisation.name,
-        contributorName: job.goodsContribution.contribution.contributor.name,
-        itemSummary: job.goodsContribution.items
-          .map((i) => `${i.quantity}× ${i.name}`)
-          .join(", "),
-      })
+      const orgEmail = job.goodsContribution.contribution.organisation.contactEmail
+      if (orgEmail) {
+        await sendDeliveryConfirmationEmail(orgEmail, {
+          orgName: job.goodsContribution.contribution.organisation.name,
+          contributorName: job.goodsContribution.contribution.contributor.name,
+          itemSummary: job.goodsContribution.items
+            .map((i) => `${i.quantity}× ${i.name}`)
+            .join(", "),
+        })
+      }
     } catch { /* non-blocking */ }
 
     await trackEvent({

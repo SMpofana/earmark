@@ -221,20 +221,24 @@ export default async function OrgDetailPage({
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-semibold text-slate-700 mb-4">Contact</h3>
               <div className="space-y-3 text-sm">
-                <a
-                  href={`mailto:${org.contactEmail}`}
-                  className="flex items-center gap-2 text-slate-600 hover:text-brand-600"
-                >
-                  <Mail className="h-4 w-4 shrink-0" />
-                  {org.contactEmail}
-                </a>
-                <a
-                  href={`tel:${org.contactPhone}`}
-                  className="flex items-center gap-2 text-slate-600 hover:text-brand-600"
-                >
-                  <Phone className="h-4 w-4 shrink-0" />
-                  {org.contactPhone}
-                </a>
+                {org.contactEmail && (
+                  <a
+                    href={`mailto:${org.contactEmail}`}
+                    className="flex items-center gap-2 text-slate-600 hover:text-brand-600"
+                  >
+                    <Mail className="h-4 w-4 shrink-0" />
+                    {org.contactEmail}
+                  </a>
+                )}
+                {org.contactPhone && (
+                  <a
+                    href={`tel:${org.contactPhone}`}
+                    className="flex items-center gap-2 text-slate-600 hover:text-brand-600"
+                  >
+                    <Phone className="h-4 w-4 shrink-0" />
+                    {org.contactPhone}
+                  </a>
+                )}
                 {org.website && (
                   <a
                     href={org.website}
