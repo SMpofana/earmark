@@ -1,18 +1,25 @@
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.EMAIL_FROM || "Earmark <noreply@earmark.co.za>"
+
+let resendClient: Resend | null = null
+function getClient(): Resend | null {
+  if (!process.env.RESEND_API_KEY) return null
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY)
+  return resendClient
+}
 
 async function send(params: {
   to: string
   subject: string
   html: string
 }) {
-  if (!process.env.RESEND_API_KEY) {
+  const client = getClient()
+  if (!client) {
     console.log(`[email] Would send to ${params.to}: ${params.subject}`)
     return
   }
-  await resend.emails.send({ from: FROM, ...params })
+  await client.emails.send({ from: FROM, ...params })
 }
 
 export async function sendOrgApprovedEmail(to: string, orgName: string) {

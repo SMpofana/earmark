@@ -100,7 +100,9 @@ export default async function OrgDetailPage({
                 <div className="flex items-center gap-2 mb-1">
                   <h1 className="text-2xl font-bold text-slate-900">{org.name}</h1>
                   {org.isVerified && (
-                    <CheckCircle2 className="h-5 w-5 text-teal-500" title="Verified organisation" />
+                    <span title="Verified organisation">
+                      <CheckCircle2 className="h-5 w-5 text-teal-500" />
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 text-sm text-slate-500">
