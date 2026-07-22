@@ -117,13 +117,15 @@ async function fetchHomepage(url: string): Promise<string | null> {
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
-/** Extract all /<slug>.html links from a list page. */
+/** Extract all /<slug>.html links from a list page.
+ *  Matches both absolute (https://www.charitysa.co.za/slug.html)
+ *  and relative (/slug.html) URLs. Accepts single or double quotes. */
 function extractSlugLinks(html: string): string[] {
-  const re = /href="(\/[^"\/]+\.html)"/g
+  const re = /href=["'](?:https?:\/\/www\.charitysa\.co\.za)?\/([^"'\/]+\.html)["']/g
   const out = new Set<string>()
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
-    out.add(m[1].replace(/^\//, ""))
+    out.add(m[1])
   }
   return Array.from(out)
 }
@@ -137,12 +139,12 @@ function extractH1(html: string): string | null {
 
 /**
  * Extract category tags from a charitysa detail page.
- * Categories appear as anchor text inside the article; we look for anchors whose
- * href matches `/category/<slug>` and take their text.
+ * Category links use absolute URLs (https://www.charitysa.co.za/category/<slug>)
+ * with rel="tag". Accept both single and double quotes.
  */
 function extractCategories(html: string): string[] {
   const out = new Set<string>()
-  const re = /href="\/category\/[^"]+"[^>]*>([^<]+)<\/a>/gi
+  const re = /href=["'](?:https?:\/\/www\.charitysa\.co\.za)?\/category\/[^"'?]+["'][^>]*>([^<]+)<\/a>/gi
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
     out.add(m[1].trim())
@@ -150,33 +152,75 @@ function extractCategories(html: string): string[] {
   return Array.from(out)
 }
 
-/** Extract the town from the page (charitysa lists town in category tags too). */
-function extractTown(html: string): string | null {
-  // Towns appear as `/location/<town-slug>` anchor text.
-  const re = /href="\/location\/[^"]+"[^>]*>([^<]+)<\/a>/i
-  const m = re.exec(html)
+// Province display names as they appear in charitysa category tags.
+const SA_PROVINCES = new Set([
+  "Gauteng", "Western Cape", "Eastern Cape", "KwaZulu-Natal", "Kwazulu-Natal",
+  "Limpopo", "Mpumalanga", "North West", "Free State", "Northern Cape",
+])
+
+// Known cause category names (keys of CHARITYSA_CATEGORY_TO_CAUSE) — used to
+// isolate the town from the category list.
+const KNOWN_CAUSE_CATEGORIES = new Set([
+  "Children and Youth", "Community", "Education", "Health", "Counselling",
+  "Animal Welfare", "Environment", "Arts and Culture", "Disaster Relief",
+  "Disability", "Elderly", "Food", "Shelter", "Clothing",
+  "Gender Based Violence", "Youth Development", "Animals", "Welfare",
+  "Sport", "Training",
+])
+
+/** Extract the town from the page.
+ *  charitysa doesn't use /location/ links; the town appears as a category tag
+ *  alongside cause categories, province, and single-letter indexes. We filter
+ *  those out to isolate the town. Fallback: parse "based in <town>" from the text. */
+function extractTown(html: string, categories: string[]): string | null {
+  // Strategy 1: filter categories to find the town.
+  const candidates = categories.filter(
+    (c) =>
+      !KNOWN_CAUSE_CATEGORIES.has(c) &&
+      !SA_PROVINCES.has(c) &&
+      c.length > 1 // skip single-letter indexes (A, B, K, etc.)
+  )
+  if (candidates.length > 0) return candidates[0]
+
+  // Strategy 2: "based in <Town>, <Province>" pattern in the page text.
+  const m = html.match(/based in\s+([^,<]{2,50}),\s*(?:Gauteng|Western Cape|Eastern Cape|KwaZulu|Limpopo|Mpumalanga|North West|Free State|Northern Cape)/i)
   return m ? m[1].trim() : null
 }
 
-/** Extract the org's own website URL (not charitysa internal links). */
+/** Extract the org's own website URL.
+ *  On charitysa detail pages, the website appears inside a `browser-shot` div
+ *  within `entry-content` as an anchor href. */
 function extractWebsite(html: string, orgName: string): string | null {
-  // Look for the first external anchor (not charitysa.co.za, not relative).
-  const re = /href="(https?:\/\/(?!www\.charitysa\.co\.za|charitysa\.co\.za)[^"]+)"/gi
+  void orgName
+
+  // Sites that are directories, social media, or theme credits — not the org's site.
+  const skipSites = [
+    "charitysa.co.za", "s0.wp.com", "robothumb.com",
+    "twitter.com", "x.com", "facebook.com", "instagram.com", "linkedin.com",
+    "gmpg.org", "hotfrog.co.za", "cryoutcreations.eu", "s.w.org", "wordpress.org",
+  ]
+
+  // Strategy 1: browser-shot div's anchor href (most reliable).
+  const shotMatch = html.match(/class="browser-shot[^"]*"[^>]*>\s*<a\s+[^>]*href=["']([^"']+)["']/i)
+  if (shotMatch && !skipSites.some((s) => shotMatch[1].includes(s))) {
+    return shotMatch[1]
+  }
+
+  // Strategy 2: first external anchor that isn't a known directory/social/theme site.
+  const re = /href=["'](https?:\/\/(?!www\.charitysa\.co\.za|charitysa\.co\.za)[^"']+)["']/gi
   let m: RegExpExecArray | null
   while ((m = re.exec(html)) !== null) {
     const href = m[1]
-    // Skip social links; we want the org homepage.
-    if (/twitter\.com|x\.com|facebook\.com|instagram\.com|linkedin\.com/.test(href)) continue
+    if (skipSites.some((s) => href.includes(s))) continue
     return href
   }
-  // Fallback: sometimes the website is in a specific block. Use orgName as a hint.
-  void orgName
+
   return null
 }
 
 /** Extract Twitter handle. */
 function extractTwitter(html: string): string | null {
-  const re = /href="(https?:\/\/(?:twitter\.com|x\.com)\/[^"]+)"/i
+  const re = /href=["'](https?:\/\/(?:twitter\.com|x\.com)\/[^"']+)["']/i
   const m = re.exec(html)
   return m ? m[1] : null
 }
@@ -295,8 +339,8 @@ async function main() {
       }
 
       const name = extractH1(detailHtml) ?? slug
-      const town = extractTown(detailHtml) ?? "Unknown"
       const categories = extractCategories(detailHtml)
+      const town = extractTown(detailHtml, categories) ?? "Unknown"
       const causes = mapCharitysaCategoriesToCauses(categories)
       const website = extractWebsite(detailHtml, name)
       const twitter = extractTwitter(detailHtml)
@@ -327,7 +371,7 @@ async function main() {
       const orgSlug = slugify(name)
       const now = new Date()
 
-      await db
+      const [orgRow] = await db
         .insert(schema.organisations)
         .values({
           id: orgId,
@@ -361,13 +405,18 @@ async function main() {
             updatedAt: now,
           },
         })
+        .returning({ id: schema.organisations.id })
+
+      // Use the actual org ID from the DB (may differ from the generated nanoid
+      // if the org was upserted onto an existing row).
+      const actualOrgId = orgRow.id
 
       // Upsert causes.
       for (const cause of causes) {
         await db
           .insert(schema.organisationCauses)
           .values({
-            organisationId: orgId,
+            organisationId: actualOrgId,
             cause: cause as (typeof schema.organisationCauses.$inferInsert)["cause"],
           })
           .onConflictDoNothing({
@@ -384,7 +433,7 @@ async function main() {
           .insert(schema.organisationImages)
           .values({
             id: nanoid(),
-            organisationId: orgId,
+            organisationId: actualOrgId,
             url: logoUrl,
             type: "logo",
             displayOrder: 0,

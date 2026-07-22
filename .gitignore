@@ -36,3 +36,6 @@ next-env.d.ts
 
 # drizzle
 drizzle/meta/
+
+# scraper run reports (per-run JSON artifacts)
+scripts/scrape-runs/

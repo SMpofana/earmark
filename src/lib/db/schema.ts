@@ -11,7 +11,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
-import { relations, sql } from "drizzle-orm"
+import { relations } from "drizzle-orm"
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -317,8 +317,7 @@ export const organisations = pgTable(
     provinceIdx: index("organisations_province_idx").on(t.province),
     userIdx: index("organisations_user_idx").on(t.userId),
     sourceExternalIdIdx: uniqueIndex("organisations_source_external_id_idx")
-      .on(t.sourceExternalId)
-      .where(sql`"source_external_id" IS NOT NULL`),
+      .on(t.sourceExternalId),
     sourceIdx: index("organisations_source_idx").on(t.source),
   })
 )
@@ -348,7 +347,9 @@ export const organisationImages = pgTable("organisation_images", {
   altText: text("alt_text"),
   displayOrder: integer("display_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-})
+}, (t) => ({
+  orgIdTypeIdx: uniqueIndex("organisation_images_org_id_type_idx").on(t.organisationId, t.type),
+}))
 
 // Organisation banking details (stored separately for security)
 export const organisationBanking = pgTable("organisation_banking", {

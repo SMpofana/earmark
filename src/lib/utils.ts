@@ -173,6 +173,7 @@ export const CHARITYSA_CATEGORY_TO_CAUSE: Record<string, string> = {
   Health: "healthcare",
   Counselling: "healthcare",
   "Animal Welfare": "animal_welfare",
+  "Animals": "animal_welfare",
   Environment: "environment",
   "Arts and Culture": "arts_culture",
   "Disaster Relief": "disaster_relief",
