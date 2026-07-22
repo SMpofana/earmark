@@ -111,6 +111,11 @@ export const courierProviderEnum = pgEnum("courier_provider", [
   "internal",
 ])
 
+export const organisationSourceEnum = pgEnum("organisation_source", [
+  "manual",
+  "charitysa_scraped",
+])
+
 export const timeSlotEnum = pgEnum("pickup_time_slot", [
   "morning_8_12",
   "afternoon_12_17",
@@ -262,18 +267,18 @@ export const organisations = pgTable(
     status: orgStatusEnum("status").notNull().default("draft"),
 
     // Contact
-    contactEmail: text("contact_email").notNull(),
-    contactPhone: text("contact_phone").notNull(),
+    contactEmail: text("contact_email"),
+    contactPhone: text("contact_phone"),
     website: text("website"),
     facebookUrl: text("facebook_url"),
     instagramUrl: text("instagram_url"),
 
     // Address
-    streetAddress: text("street_address").notNull(),
+    streetAddress: text("street_address"),
     suburb: text("suburb"),
     city: text("city").notNull(),
     province: saProvinceEnum("province").notNull(),
-    postalCode: text("postal_code").notNull(),
+    postalCode: text("postal_code"),
     latitude: real("latitude"),
     longitude: real("longitude"),
 
@@ -297,12 +302,23 @@ export const organisations = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
     submittedAt: timestamp("submitted_at"),
     verifiedAt: timestamp("verified_at"),
+
+    // Source tracking (scraper vs manual) + claim flow
+    source: organisationSourceEnum("source").notNull().default("manual"),
+    sourceExternalId: text("source_external_id"),
+    claimedAt: timestamp("claimed_at"),
+    claimedByUserId: text("claimed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
   },
   (t) => ({
     slugIdx: uniqueIndex("organisations_slug_idx").on(t.slug),
     statusIdx: index("organisations_status_idx").on(t.status),
     provinceIdx: index("organisations_province_idx").on(t.province),
     userIdx: index("organisations_user_idx").on(t.userId),
+    sourceExternalIdIdx: uniqueIndex("organisations_source_external_id_idx")
+      .on(t.sourceExternalId),
+    sourceIdx: index("organisations_source_idx").on(t.source),
   })
 )
 
@@ -331,7 +347,9 @@ export const organisationImages = pgTable("organisation_images", {
   altText: text("alt_text"),
   displayOrder: integer("display_order").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-})
+}, (t) => ({
+  orgIdTypeIdx: uniqueIndex("organisation_images_org_id_type_idx").on(t.organisationId, t.type),
+}))
 
 // Organisation banking details (stored separately for security)
 export const organisationBanking = pgTable("organisation_banking", {
@@ -354,6 +372,55 @@ export const organisationBanking = pgTable("organisation_banking", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
+
+// Organisation claim requests (admin-mediated; charitysa doesn't expose emails)
+export const organisationClaims = pgTable(
+  "organisation_claims",
+  {
+    id: text("id").primaryKey(),
+    organisationId: text("organisation_id")
+      .notNull()
+      .references(() => organisations.id, { onDelete: "cascade" }),
+    claimerUserId: text("claimer_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    claimerEmail: text("claimer_email").notNull(),
+    claimerRoleAtOrg: text("claimer_role_at_org").notNull(),
+    proofUrl: text("proof_url"),
+    proofNotes: text("proof_notes"),
+    status: text("status").notNull().default("pending"),
+    reviewedByUserId: text("reviewed_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    statusIdx: index("organisation_claims_status_idx").on(t.status),
+    orgIdx: index("organisation_claims_org_idx").on(t.organisationId),
+  })
+)
+
+export const organisationClaimsRelations = relations(
+  organisationClaims,
+  ({ one }) => ({
+    organisation: one(organisations, {
+      fields: [organisationClaims.organisationId],
+      references: [organisations.id],
+    }),
+    claimer: one(users, {
+      fields: [organisationClaims.claimerUserId],
+      references: [users.id],
+      relationName: "claim_claimer",
+    }),
+    reviewer: one(users, {
+      fields: [organisationClaims.reviewedByUserId],
+      references: [users.id],
+      relationName: "claim_reviewer",
+    }),
+  })
+)
 
 // ── Contributions (parent record) ─────────────────────────────────────────────
 
@@ -682,11 +749,17 @@ export const organisationsRelations = relations(
       fields: [organisations.userId],
       references: [users.id],
     }),
+    claimedBy: one(users, {
+      fields: [organisations.claimedByUserId],
+      references: [users.id],
+      relationName: "claimed_orgs",
+    }),
     causes: many(organisationCauses),
     images: many(organisationImages),
     banking: one(organisationBanking),
     contributions: many(contributions),
     followers: many(organisationFollowers),
+    claims: many(organisationClaims),
   })
 )
 

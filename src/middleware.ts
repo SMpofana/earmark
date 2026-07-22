@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth } from "./lib/auth"
 
 const PUBLIC_PATHS = [
   "/",
@@ -11,7 +10,10 @@ const PUBLIC_PATHS = [
   "/api/analytics/events",
 ]
 
-export async function middleware(request: NextRequest) {
+// better-auth default cookie: <prefix>.session_token
+const SESSION_COOKIE = "better-auth.session_token"
+
+export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   const isPublic =
@@ -21,21 +23,20 @@ export async function middleware(request: NextRequest) {
 
   if (isPublic) return NextResponse.next()
 
-  const session = await auth.api.getSession({
-    headers: request.headers,
-  })
+  // Lightweight cookie-only check — avoids importing better-auth/drizzle/postgres
+  // (which use Node APIs not available in the Edge Runtime).
+  // Authoritative session + role checks still happen in each route handler /
+  // server component via auth.api.getSession().
+  const hasSession = request.cookies.get(SESSION_COOKIE)
 
-  if (!session) {
+  if (!hasSession) {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("callbackUrl", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Admin-only routes
-  if (pathname.startsWith("/admin") && session.user.role !== "super_admin") {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
-  }
-
+  // Admin role check is enforced inside /admin page and /api/admin routes
+  // via auth.api.getSession() — not here, to keep middleware Edge-safe.
   return NextResponse.next()
 }
 

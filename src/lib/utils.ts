@@ -163,3 +163,78 @@ export function contributionStatusLabel(status: string): string {
   }
   return map[status] ?? status
 }
+
+// ── charitysa.co.za category → Earmark cause enum ─────────────────────────────
+// Used by scripts/scrape-charitysa.ts. Unmapped categories fall back to "other".
+export const CHARITYSA_CATEGORY_TO_CAUSE: Record<string, string> = {
+  "Children and Youth": "children",
+  Community: "community_development",
+  Education: "education",
+  Health: "healthcare",
+  Counselling: "healthcare",
+  "Animal Welfare": "animal_welfare",
+  "Animals": "animal_welfare",
+  Environment: "environment",
+  "Arts and Culture": "arts_culture",
+  "Disaster Relief": "disaster_relief",
+  Disability: "disability",
+  Elderly: "elderly",
+  Food: "food_security",
+  Shelter: "shelter",
+  Clothing: "clothing",
+  "Gender Based Violence": "gender_based_violence",
+  "Youth Development": "youth_development",
+}
+
+export function mapCharitysaCategoriesToCauses(categories: string[]): string[] {
+  const mapped = categories
+    .map((c) => CHARITYSA_CATEGORY_TO_CAUSE[c])
+    .filter((c): c is string => Boolean(c))
+  // dedupe (multiple charitysa categories can map to the same cause, e.g. Health + Counselling → healthcare)
+  return Array.from(new Set(mapped))
+}
+
+// ── City geocoder (Nominatim / OpenStreetMap) ──────────────────────────────────
+// In-memory cache so repeated cities don't re-fetch. One-time-per-city across a
+// scraper run is the dominant case (many orgs share towns in Gauteng).
+const geocodeCache = new Map<string, { lat: number; lng: number } | null>()
+
+export async function geocodeCity(
+  city: string,
+  province: string
+): Promise<{ lat: number; lng: number } | null> {
+  const key = `${city}|${province}`.toLowerCase()
+  if (geocodeCache.has(key)) return geocodeCache.get(key) ?? null
+
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+    `${city}, ${province}, South Africa`
+  )}&format=json&limit=1`
+
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "EarmarkBot/1.0 (contact: https://earmark.co.za)",
+        "Accept-Language": "en-ZA",
+      },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    if (!res.ok) {
+      geocodeCache.set(key, null)
+      return null
+    }
+    const data = (await res.json()) as Array<{ lat: string; lon: string }>
+    if (!data.length) {
+      geocodeCache.set(key, null)
+      return null
+    }
+    const result = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) }
+    geocodeCache.set(key, result)
+    return result
+  } catch {
+    geocodeCache.set(key, null)
+    return null
+  }
+}

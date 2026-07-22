@@ -22,16 +22,11 @@ import {
   X,
 } from "lucide-react"
 import {
-  CAUSES,
-  SA_PROVINCES,
-  SA_BANKS,
   formatCause,
   formatProvince,
   causeColor,
+  formatBank,
 } from "@/lib/utils"
-
-// We import from lib/utils for format helpers — they're identical to validations const lists
-import { formatBank } from "@/lib/utils"
 
 const STEPS = [
   { id: 1, label: "Basics", icon: Building2 },

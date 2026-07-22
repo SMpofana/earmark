@@ -146,7 +146,9 @@ function OrgReviewList({
                 )}
               </div>
               <p className="text-sm text-slate-500 mb-2">
-                {org.city}, {formatProvince(org.province)} · {org.contactEmail} · {org.contactPhone}
+                {[org.city, formatProvince(org.province), org.contactEmail, org.contactPhone]
+                  .filter(Boolean)
+                  .join(" · ")}
               </p>
               <p className="text-sm text-slate-600 line-clamp-2 mb-3">{org.description}</p>
               <div className="flex flex-wrap gap-1.5 mb-3">

@@ -11,8 +11,9 @@ import {
   MapPin, Phone, ArrowRight, ShieldCheck,
 } from "lucide-react"
 import {
-  contributionStatusLabel, formatCurrency, formatTimeSlot, courierProviderLabel,
+  contributionStatusLabel, formatCurrency, formatTimeSlot,
 } from "@/lib/utils"
+import { courierProviderLabel } from "@/lib/courier"
 
 export default async function TrackPage({
   params,
